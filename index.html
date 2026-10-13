@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>태풍 진로 및 피해 시뮬레이터</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #0b1120;
+            color: #f1f5f9;
+        }
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-white">
+    <header class="bg-slate-900/90 border-b border-slate-800 backdrop-blur px-5 py-3 sticky top-0 z-40 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
+                <i class="fa-solid fa-hurricane text-lg animate-spin" style="animation-duration: 8s;"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    동아시아 태풍 진로 & 피해 시뮬레이션
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-medium">기상청 모델식</span>
+                </h1>
+                <p class="text-xs text-slate-400">북태평양 고기압 가장자리 지향류 및 중위도 편서풍 역학 분석기</p>
+            </div>
+        </div>
+
+        <!-- Predefined Scenarios -->
+        <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs text-slate-400 font-medium mr-1"><i class="fa-solid fa-route mr-1 text-slate-500"></i>진로 시나리오:</span>
+            <button onclick="setScenario('korea')" id="btn-korea" class="scenario-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-600 text-white shadow transition-all hover:bg-cyan-500">
+                한반도 상륙형 (힌남노/매미형)
+            </button>
+            <button onclick="setScenario('west')" id="btn-west" class="scenario-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition-all">
+                중국/남중국해 서진형 (사우델형)
+            </button>
+            <button onclick="setScenario('japan')" id="btn-japan" class="scenario-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition-all">
+                동쪽 해상 조기전향형
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 max-w-[1700px] mx-auto w-full">
+        
+        <!-- Left & Center: Canvas Simulation Display (8 Cols) -->
+        <div class="lg:col-span-8 flex flex-col gap-3">
+            <!-- Map View Container -->
+            <div class="relative w-full aspect-[4/3] sm:aspect-[16/10] bg-slate-950 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+                
+                <!-- Overlay Top Legend and Controls -->
+                <div class="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between pointer-events-none gap-2">
+                    <div class="pointer-events-auto bg-slate-900/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-700/70 text-xs shadow-lg flex items-center gap-3">
+                        <div class="flex items-center gap-1.5">
+                            <span class="inline-block w-3 h-3 rounded-full bg-red-500/80 border border-red-300 animate-pulse"></span>
+                            <span class="text-slate-200 font-semibold" id="hud-typhoon-name">제18호 태풍 '사우델' (SAUDEL)</span>
+                        </div>
+                        <span class="text-slate-600">|</span>
+                        <div class="text-slate-300">
+                            중심기압: <span id="hud-pressure" class="code-font text-cyan-400 font-bold">950</span> hPa
+                        </div>
+                        <span class="text-slate-600">|</span>
+                        <div class="text-slate-300">
+                            최대풍속: <span id="hud-wind" class="code-font text-amber-400 font-bold">43</span> m/s (<span id="hud-grade" class="text-red-400 font-semibold">강</span>)
+                        </div>
+                    </div>
+
+                    <!-- Atmospheric Layer Toggles -->
+                    <div class="pointer-events-auto bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700/70 text-xs shadow-lg flex items-center gap-2">
+                        <label class="flex items-center gap-1.5 cursor-pointer text-blue-300 hover:text-white transition">
+                            <input type="checkbox" id="toggle-high-pressure" checked onchange="redrawMap()" class="rounded bg-slate-800 border-slate-600 text-cyan-500 focus:ring-0">
+                            <span>북태평양 고기압</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer text-amber-300 hover:text-white transition ml-1">
+                            <input type="checkbox" id="toggle-westerlies" checked onchange="redrawMap()" class="rounded bg-slate-800 border-slate-600 text-amber-500 focus:ring-0">
+                            <span>편서풍 기류대</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white transition ml-1">
+                            <input type="checkbox" id="toggle-danger-semicircle" checked onchange="redrawMap()" class="rounded bg-slate-800 border-slate-600 text-red-500 focus:ring-0">
+                            <span>위험반원 표시</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Canvas -->
+                <canvas id="weatherCanvas" class="w-full h-full cursor-crosshair block"></canvas>
+
+                <!-- Map Bottom Info Overlay -->
+                <div class="absolute bottom-3 left-3 pointer-events-none bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 flex items-center gap-3">
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-yellow-400/50 border border-yellow-300 rounded-full inline-block"></span> 폭풍반경 (25m/s 이상)</span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-sky-400/30 border border-sky-400 rounded-full inline-block"></span> 강풍반경 (15m/s 이상)</span>
+                    <span class="flex items-center gap-1 text-red-400"><i class="fa-solid fa-arrows-split-up-and-left rotate-90"></i> 우측 위험반원</span>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 shadow-xl flex flex-col sm:flex-row items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <button id="btn-play" onclick="togglePlay()" class="w-10 h-10 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white flex items-center justify-center shadow-lg transition active:scale-95">
+                        <i id="play-icon" class="fa-solid fa-play"></i>
+                    </button>
+                    <button onclick="resetTimeline()" class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center border border-slate-700 transition active:scale-95" title="처음으로 되돌리기">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
+
+                <div class="flex-1 w-full flex flex-col gap-1">
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span class="font-medium text-cyan-400" id="timeline-time-label">발생 후 +00시간 (현재위치)</span>
+                        <span id="timeline-date-label" class="code-font text-slate-400">발생일 09:00 기준</span>
+                    </div>
+                    <input type="range" id="time-slider" min="0" max="72" value="0" step="1" 
+                           oninput="onSliderChange(this.value)"
+                           class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                </div>
+
+                <div class="flex items-center gap-2 text-xs border-l border-slate-800 pl-3">
+                    <span class="text-slate-400">재생속도:</span>
+                    <select id="sim-speed" onchange="changeSpeed(this.value)" class="bg-slate-800 border border-slate-700 rounded-lg text-slate-200 px-2 py-1 text-xs focus:ring-0">
+                        <option value="1">1x</option>
+                        <option value="2" selected>2x</option>
+                        <option value="4">4x</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-4">
+                <div class="flex items-center gap-2 text-sm font-bold text-slate-200 mb-2">
+                    <i class="fa-solid fa-cloud-bolt text-cyan-400"></i>
+                    태풍 진로 결정 2대 역학 원리
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs leading-relaxed text-slate-300">
+                    <div class="bg-slate-800/60 p-3 rounded-lg border border-cyan-900/40">
+                        <div class="font-bold text-cyan-300 mb-1 flex items-center gap-1.5">
+                            <i class="fa-solid fa-compass"></i> 1. 북태평양 고기압의 지향류 (유도)
+                        </div>
+                        태풍은 거대한 북태평양 고기압을 직접 뚫지 못하고, 고기압 가장자리의 시계 방향 회전 바람(지향류)을 타고 이동합니다.
+                        고기압이 서쪽으로 강하게 확장하면 중국 쪽으로 밀려가고, 수축하면 동해나 일본 방향으로 일찍 방향을 꺾습니다.
+                    </div>
+                    <div class="bg-slate-800/60 p-3 rounded-lg border border-amber-900/40">
+                        <div class="font-bold text-amber-300 mb-1 flex items-center gap-1.5">
+                            <i class="fa-solid fa-wind"></i> 2. 중위도 편서풍의 전향 가속
+                        </div>
+                        북위 약 28°~30° 부근에 진입하면 서쪽에서 동쪽으로 부는 강한 <strong>편서풍</strong>을 만나 진로를 북동쪽으로 급격히 꺾게(전향) 됩니다.
+                        이때 편서풍과 태풍 자체 풍속이 합쳐지는 <strong>동쪽(오른쪽) 반원은 '위험반원'</strong>이 되어 폭풍 피해가 집중됩니다.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Atmospheric Controls & Disaster Impact Analysis (4 Cols) -->
+        <div class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Atmospheric Adjustments -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-xl">
+                <h2 class="text-sm font-bold text-slate-200 mb-3 flex items-center justify-between">
+                    <span><i class="fa-solid fa-sliders text-cyan-400 mr-2"></i>기상 환경 파라미터 조절</span>
+                    <button onclick="resetParams()" class="text-[11px] text-slate-400 hover:text-cyan-400 font-normal"><i class="fa-solid fa-arrows-rotate mr-1"></i>기본값</button>
+                </h2>
+
+                <div class="space-y-3.5 text-xs">
+                    <!-- North Pacific High Expansion -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-300">북태평양 고기압 서쪽 확장세</span>
+                            <span id="label-high-strength" class="code-font text-cyan-400 font-bold">보통 (한반도 지향)</span>
+                        </div>
+                        <input type="range" id="param-high" min="0" max="100" value="50" 
+                               oninput="updateHighPressure(this.value)"
+                               class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                            <span>수축 (일본행)</span>
+                            <span>평균</span>
+                            <span>강한 확장 (중국행)</span>
+                        </div>
+                    </div>
+
+                    <!-- Westerlies Jet Intensity -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-300">편서풍(제트기류) 강도</span>
+                            <span id="label-westerlies" class="code-font text-amber-400 font-bold">강함 (빠른 북동진)</span>
+                        </div>
+                        <input type="range" id="param-wind" min="10" max="90" value="65" 
+                               oninput="updateWesterlies(this.value)"
+                               class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                            <span>약한 편서풍</span>
+                            <span>강한 제트기류 (가속도↑)</span>
+                        </div>
+                    </div>
+
+                    <!-- Sea Surface Temperature (SST) -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-300">해수면 온도 (태풍 에너지원)</span>
+                            <span id="label-sst" class="code-font text-rose-400 font-bold">29.5°C (매우 높음)</span>
+                        </div>
+                        <input type="range" id="param-sst" min="25" max="32" step="0.5" value="29.5" 
+                               oninput="updateSST(this.value)"
+                               class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-rose-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Damage & Impact Estimator -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-xl flex-1 flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold text-slate-200 flex items-center">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-400 mr-2"></i>지역별 예상 피해 규모
+                    </h2>
+                    <span id="danger-level-badge" class="px-2 py-0.5 rounded text-[11px] font-bold bg-red-950 text-red-400 border border-red-800">
+                        경보 발령
+                    </span>
+                </div>
+
+                <!-- Comprehensive Stats -->
+                <div class="grid grid-cols-2 gap-2 mb-3 text-center">
+                    <div class="bg-slate-800/70 p-2.5 rounded-lg border border-slate-700/50">
+                        <span class="text-[11px] text-slate-400 block mb-0.5">최대 순간풍속</span>
+                        <span id="stat-peak-wind" class="text-lg font-bold text-amber-400 code-font">48.2 <span class="text-xs">m/s</span></span>
+                        <span class="text-[10px] text-slate-500 block">간판 파손 및 전신주 위험</span>
+                    </div>
+                    <div class="bg-slate-800/70 p-2.5 rounded-lg border border-slate-700/50">
+                        <span class="text-[11px] text-slate-400 block mb-0.5">예상 최대 강우량</span>
+                        <span id="stat-peak-rain" class="text-lg font-bold text-cyan-400 code-font">420 <span class="text-xs">mm</span></span>
+                        <span class="text-[10px] text-slate-500 block">산사태 및 저지대 침수</span>
+                    </div>
+                </div>
+
+                <!-- Regional Impact Bars -->
+                <div class="space-y-2.5 flex-1 overflow-y-auto pr-1" id="region-impact-list">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- Disaster Scale Prediction Notice -->
+                <div class="mt-3 pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
+                    <i class="fa-solid fa-shield-halved text-cyan-400 mt-0.5 shrink-0"></i>
+                    <p id="damage-summary-text">태풍이 제주도 및 남해안에 최근접하여 폭풍해일 및 강풍 피해가 예상됩니다. 해안가 접근을 금지하세요.</p>
+                </div>
+            </div>
+
+            <!-- Danger vs Navigable Semicircle Explanation Card -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-300">
+                <div class="font-bold text-slate-200 mb-1 flex items-center justify-between">
+                    <span><i class="fa-solid fa-circle-radiation text-rose-400 mr-1.5"></i>위험반원(Danger Semicircle)이란?</span>
+                    <span class="text-[10px] bg-red-900/40 text-red-300 px-1.5 py-0.5 rounded border border-red-800">우측 180°</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                    태풍의 진행방향 기준 <span class="text-red-400 font-semibold">오른쪽 반원</span>은 태풍 자체의 반시계 회전풍과 주변 기류(편서풍·고기압 순환)가 <strong>더해져 풍속이 20~30% 급증</strong>합니다. 반대로 왼쪽은 바람이 상쇄되는 <span class="text-blue-400 font-semibold">가항반원</span>입니다.
+                </p>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        /* Geographical Coordinates for East Asian Map projection */
+        // Canvas coordinate boundaries (Roughly 110E to 148E, 14N to 44N)
+        const MAP_BOUNDS = {
+            minLon: 112,
+            maxLon: 146,
+            minLat: 16,
+            maxLat: 43
+        };
+
+        // Major cities & reference points
+        const CITIES = [
+            { name: "서울", lon: 127.0, lat: 37.5, country: "KR" },
+            { name: "제주", lon: 126.5, lat: 33.5, country: "KR" },
+            { name: "부산", lon: 129.0, lat: 35.1, country: "KR" },
+            { name: "서귀포", lon: 126.56, lat: 33.25, country: "KR" },
+            { name: "독도", lon: 131.8, lat: 37.2, country: "KR" },
+            { name: "이어도", lon: 125.1, lat: 32.1, country: "KR" },
+            { name: "상하이", lon: 121.5, lat: 31.2, country: "CN" },
+            { name: "칭다오", lon: 120.3, lat: 36.1, country: "CN" },
+            { name: "베이징", lon: 116.4, lat: 39.9, country: "CN" },
+            { name: "타이베이", lon: 121.5, lat: 25.0, country: "TW" },
+            { name: "오키나와", lon: 127.8, lat: 26.3, country: "JP" },
+            { name: "가고시마", lon: 130.5, lat: 31.6, country: "JP" },
+            { name: "도쿄", lon: 139.7, lat: 35.7, country: "JP" },
+            { name: "마닐라", lon: 120.9, lat: 14.6, country: "PH" },
+            { name: "홍콩", lon: 114.1, lat: 22.3, country: "CN" },
+            { name: "괌", lon: 144.7, lat: 13.4, country: "GU" }
+        ];
+
+        /* Simplified East Asian Coastlines Polygon Array (Relative lon/lat) */
+        const COASTLINES = [
+            // Korean Peninsula
+            [
+                { lon: 124.5, lat: 40.0 }, { lon: 126.0, lat: 39.8 }, { lon: 125.2, lat: 37.8 },
+                { lon: 126.5, lat: 37.0 }, { lon: 126.0, lat: 35.0 }, { lon: 126.8, lat: 34.3 },
+                { lon: 128.5, lat: 34.8 }, { lon: 129.4, lat: 35.5 }, { lon: 129.3, lat: 36.5 },
+                { lon: 129.2, lat: 38.5 }, { lon: 130.0, lat: 41.5 }, { lon: 130.5, lat: 42.4 },
+                { lon: 128.0, lat: 41.5 }, { lon: 125.0, lat: 40.5 }, { lon: 124.5, lat: 40.0 }
+            ],
+            // Jeju Island
+            [
+                { lon: 126.2, lat: 33.3 }, { lon: 126.8, lat: 33.5 }, { lon: 126.9, lat: 33.4 },
+                { lon: 126.5, lat: 33.2 }, { lon: 126.2, lat: 33.3 }
+            ],
+            // China East Coast
+            [
+                { lon: 118.0, lat: 40.0 }, { lon: 121.5, lat: 40.8 }, { lon: 122.0, lat: 39.0 },
+                { lon: 119.0, lat: 37.5 }, { lon: 122.5, lat: 37.2 }, { lon: 120.5, lat: 34.5 },
+                { lon: 121.8, lat: 31.5 }, { lon: 121.2, lat: 29.5 }, { lon: 120.0, lat: 27.0 },
+                { lon: 117.5, lat: 23.8 }, { lon: 114.0, lat: 22.2 }, { lon: 110.0, lat: 20.5 }
+            ],
+            // Taiwan
+            [
+                { lon: 121.5, lat: 25.3 }, { lon: 122.0, lat: 24.5 }, { lon: 121.0, lat: 22.0 },
+                { lon: 120.0, lat: 23.5 }, { lon: 121.5, lat: 25.3 }
+            ],
+            // Japan Main Islands (Kyushu, Shikoku, Honshu)
+            [
+                { lon: 130.0, lat: 31.5 }, { lon: 131.5, lat: 31.5 }, { lon: 132.0, lat: 33.5 },
+                { lon: 133.5, lat: 33.5 }, { lon: 135.5, lat: 33.5 }, { lon: 136.8, lat: 34.5 },
+                { lon: 139.8, lat: 35.0 }, { lon: 141.0, lat: 37.0 }, { lon: 141.5, lat: 40.5 },
+                { lon: 140.0, lat: 41.0 }, { lon: 139.5, lat: 38.0 }, { lon: 136.5, lat: 36.5 },
+                { lon: 133.0, lat: 35.5 }, { lon: 130.5, lat: 33.5 }, { lon: 130.0, lat: 31.5 }
+            ],
+            // Okinawa Group
+            [
+                { lon: 127.5, lat: 26.2 }, { lon: 128.2, lat: 26.8 }, { lon: 128.0, lat: 26.5 }, { lon: 127.5, lat: 26.2 }
+            ],
+            // Philippines Northern Luzon
+            [
+                { lon: 120.5, lat: 18.5 }, { lon: 122.2, lat: 18.2 }, { lon: 122.5, lat: 16.0 },
+                { lon: 120.0, lat: 15.5 }, { lon: 120.5, lat: 18.5 }
+            ]
+        ];
+
+        let simState = {
+            currentHour: 0,
+            maxHours: 72,
+            isPlaying: false,
+            playbackSpeed: 2,
+            currentScenario: 'korea', // 'korea', 'west', 'japan'
+            highPressureExpansion: 50, // 0 to 100
+            westerliesSpeed: 65,       // 10 to 90
+            sst: 29.5,                 // 25 to 32 C
+            particles: [],             // Atmospheric wind flow visualizer
+            interpolatedTrack: []
+        };
+
+        const canvas = document.getElementById('weatherCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationFrameId = null;
+
+        // Convert Lon/Lat to Canvas X/Y Coordinates
+        function geoToCanvas(lon, lat) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const x = ((lon - MAP_BOUNDS.minLon) / (MAP_BOUNDS.maxLon - MAP_BOUNDS.minLon)) * w;
+            const y = h - ((lat - MAP_BOUNDS.minLat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat)) * h;
+            return { x, y };
+        }
+
+        // Convert Canvas X/Y back to Lon/Lat
+        function canvasToGeo(x, y) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const lon = MAP_BOUNDS.minLon + (x / w) * (MAP_BOUNDS.maxLon - MAP_BOUNDS.minLon);
+            const lat = MAP_BOUNDS.minLat + ((h - y) / h) * (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat);
+            return { lon, lat };
+        }
+
+        /*
+          The physics of typhoon steering:
+          1. Trade Winds & High Pressure Periphery (steers WNW towards ~26N-30N).
+          2. Ridge of North Pacific High acts as a barrier.
+          3. Recurvature Point: when crossing ridge, westerly jet stream takes over (steers ENE & accelerates).
+        */
+        function generateTyphoonTrack() {
+            const track = [];
+            
+            // Base Origin (Near Micronesia/Philippines East Sea)
+            let lon = 138.5;
+            let lat = 16.5;
+            let pressure = 998;
+            let windSpeed = 22; // m/s
+            let galeRadius = 220; // 15 m/s radius in km
+            let stormRadius = 70; // 25 m/s radius in km
+
+            // High pressure ridge line latitude and westernmost longitude shift
+            // High parameter: 0 (retracted East/weak) ~ 100 (extended West into East China Sea)
+            const ridgeLon = 124.0 - ((simState.highPressureExpansion - 50) * 0.16);
+            const recurveLat = 27.0 + ((simState.highPressureExpansion - 50) * 0.08);
+
+            for (let hour = 0; hour <= simState.maxHours; hour += 1) {
+                // Growth & Decay Model based on Sea Surface Temp & Landfall
+                if (lat < 28) {
+                    // Intensifying over warm tropical ocean
+                    const potential = (simState.sst - 26) * 12;
+                    windSpeed = Math.min(54, windSpeed + 0.45 + (potential * 0.015));
+                    pressure = Math.max(935, 1005 - (windSpeed * 1.3));
+                    galeRadius = Math.min(380, 220 + (windSpeed * 3));
+                    stormRadius = Math.min(150, 70 + (windSpeed * 1.5));
+                } else {
+                    // Weakening over colder waters or mid-latitudes
+                    windSpeed = Math.max(18, windSpeed - 0.4);
+                    pressure = Math.min(995, pressure + 0.7);
+                    galeRadius = Math.max(180, galeRadius - 1.2);
+                    stormRadius = Math.max(0, stormRadius - 1.8);
+                }
+
+                // Steering Vector calculation
+                let speedKnots = 18;
+                let angleDeg = 0;
+
+                if (lat < recurveLat) {
+                    // Phase 1: Steered by Trade Winds and southern flank of High Pressure (NW to WNW)
+                    const pushWestFactor = (simState.highPressureExpansion / 50);
+                    const dx = -0.22 * pushWestFactor;
+                    const dy = 0.17;
+                    lon += dx;
+                    lat += dy;
+                } else {
+                    // Phase 2: Recurvature around High Ridge & Accelerated by Westerlies
+                    const westerliesPower = simState.westerliesSpeed / 50;
+                    const dx = 0.28 * westerliesPower;
+                    const dy = 0.20 + (0.05 * westerliesPower);
+                    lon += dx;
+                    lat += dy;
+                }
+
+                // Append status point
+                track.push({
+                    hour,
+                    lon,
+                    lat,
+                    pressure: Math.round(pressure),
+                    windSpeed: Math.round(windSpeed * 10) / 10,
+                    galeRadius: Math.round(galeRadius),
+                    stormRadius: Math.max(0, Math.round(stormRadius)),
+                    stage: getTyphoonGrade(windSpeed)
+                });
+            }
+
+            return track;
+        }
+
+        function getTyphoonGrade(ws) {
+            if (ws >= 54) return "초강력";
+            if (ws >= 44) return "매우 강";
+            if (ws >= 33) return "강";
+            if (ws >= 25) return "중";
+            if (ws >= 17) return "열대폭풍(TS)";
+            return "열대저압부(TD)";
+        }
+
+        function initAtmosphericParticles() {
+            simState.particles = [];
+            const count = 75;
+            for (let i = 0; i < count; i++) {
+                simState.particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    type: Math.random() > 0.45 ? 'westerly' : 'highPressure',
+                    life: Math.random() * 80 + 20
+                });
+            }
+        }
+
+        function updateAtmosphericParticles() {
+            const w = canvas.width;
+            const h = canvas.height;
+            simState.particles.forEach(p => {
+                p.life--;
+                if (p.life <= 0) {
+                    p.x = Math.random() * w;
+                    p.y = Math.random() * h;
+                    p.life = Math.random() * 80 + 20;
+                }
+
+                if (p.type === 'westerly') {
+                    // Mid-latitude westerlies: blow from West to East (top half of map)
+                    const speed = (simState.westerliesSpeed / 30) + 1.2;
+                    p.x += speed * 1.5;
+                    p.y -= 0.15; // slightly northward
+                    if (p.x > w) p.x = 0;
+                } else {
+                    // High pressure: anticyclonic clockwise rotation around center
+                    // High Center in canvas coords (approx 138E, 30N)
+                    const highPos = geoToCanvas(137 + ((simState.highPressureExpansion - 50) * 0.1), 29);
+                    const dx = p.x - highPos.x;
+                    const dy = p.y - highPos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 30 && dist < 420) {
+                        // Clockwise velocity: (-dy, dx)
+                        const speed = 1.3;
+                        p.x += (-dy / dist) * speed;
+                        p.y += (dx / dist) * speed;
+                    }
+                }
+            });
+        }
+
+        function drawMapBackground() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Deep ocean gradient
+            const oceanGrad = ctx.createLinearGradient(0, 0, w, h);
+            oceanGrad.addColorStop(0, '#0c162d');
+            oceanGrad.addColorStop(1, '#07101f');
+            ctx.fillStyle = oceanGrad;
+            ctx.fillRect(0, 0, w, h);
+
+            // Draw Longitude and Latitude Graticule Lines
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 0.8;
+            ctx.setLineDash([4, 4]);
+            ctx.font = '10px "JetBrains Mono", sans-serif';
+            ctx.fillStyle = '#475569';
+
+            // Longitude (115°E to 145°E)
+            for (let lon = 115; lon <= 145; lon += 5) {
+                const pos = geoToCanvas(lon, 20);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, 0);
+                ctx.lineTo(pos.x, h);
+                ctx.stroke();
+                ctx.fillText(`${lon}°E`, pos.x + 4, h - 8);
+            }
+
+            // Latitude (15°N to 40°N)
+            for (let lat = 20; lat <= 40; lat += 5) {
+                const pos = geoToCanvas(115, lat);
+                ctx.beginPath();
+                ctx.moveTo(0, pos.y);
+                ctx.lineTo(w, pos.y);
+                ctx.stroke();
+                ctx.fillText(`${lat}°N`, 6, pos.y - 4);
+            }
+            ctx.setLineDash([]);
+
+            // Draw Landmass Coastlines
+            ctx.fillStyle = '#172338';
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1.5;
+
+            COASTLINES.forEach(poly => {
+                ctx.beginPath();
+                poly.forEach((pt, idx) => {
+                    const c = geoToCanvas(pt.lon, pt.lat);
+                    if (idx === 0) ctx.moveTo(c.x, c.y);
+                    else ctx.lineTo(c.x, c.y);
+                });
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            });
+
+            // Draw City Markers
+            CITIES.forEach(city => {
+                const pt = geoToCanvas(city.lon, city.lat);
+                // Dot
+                ctx.fillStyle = city.country === 'KR' ? '#38bdf8' : '#94a3b8';
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Name label
+                ctx.font = '500 11px Pretendard, sans-serif';
+                ctx.fillStyle = city.country === 'KR' ? '#e0f2fe' : '#94a3b8';
+                ctx.fillText(city.name, pt.x + 5, pt.y - 4);
+            });
+        }
+
+        function drawAtmosphericPhenomena() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // 1. North Pacific Subtropical High (북태평양 고기압)
+            const showHigh = document.getElementById('toggle-high-pressure').checked;
+            if (showHigh) {
+                const highLon = 137 + ((simState.highPressureExpansion - 50) * 0.1);
+                const highLat = 29.5;
+                const highCenter = geoToCanvas(highLon, highLat);
+                const radiusX = 260 + (simState.highPressureExpansion * 1.5);
+                const radiusY = 160;
+
+                ctx.save();
+                ctx.translate(highCenter.x, highCenter.y);
+                
+                // Translucent high pressure zone aura
+                const highGrad = ctx.createRadialGradient(0, 0, 40, 0, 0, radiusX);
+                highGrad.addColorStop(0, 'rgba(56, 189, 248, 0.22)');
+                highGrad.addColorStop(0.7, 'rgba(14, 116, 144, 0.10)');
+                highGrad.addColorStop(1, 'rgba(14, 116, 144, 0)');
+                ctx.fillStyle = highGrad;
+
+                ctx.beginPath();
+                ctx.ellipse(0, 0, radiusX, radiusY, -0.15, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Boundary Ridge Line
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+                ctx.lineWidth = 1.8;
+                ctx.setLineDash([8, 6]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Clockwise Steering Arrow indicators on western flank
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.8)';
+                ctx.font = 'bold 12px Pretendard, sans-serif';
+                ctx.fillText("북태평양 고기압 (North Pacific High)", -90, -10);
+                ctx.font = '10px Pretendard, sans-serif';
+                ctx.fillStyle = '#7dd3fc';
+                ctx.fillText("시계 방향 지향류 (Typhoon Steering Flow)", -80, 8);
+
+                ctx.restore();
+            }
+
+            // 2. Mid-Latitude Westerlies (중위도 편서풍대)
+            const showWesterlies = document.getElementById('toggle-westerlies').checked;
+            if (showWesterlies) {
+                const jetLat = 31.0;
+                const jetCanvas = geoToCanvas(112, jetLat);
+
+                ctx.save();
+                // Gradient band for jet stream
+                const jetGrad = ctx.createLinearGradient(0, jetCanvas.y - 50, 0, jetCanvas.y + 50);
+                jetGrad.addColorStop(0, 'rgba(245, 158, 11, 0)');
+                jetGrad.addColorStop(0.5, 'rgba(245, 158, 11, 0.12)');
+                jetGrad.addColorStop(1, 'rgba(245, 158, 11, 0)');
+                ctx.fillStyle = jetGrad;
+                ctx.fillRect(0, jetCanvas.y - 50, w, 100);
+
+                // Westerly flow streamline arrows
+                ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(30, jetCanvas.y);
+                ctx.bezierCurveTo(w * 0.35, jetCanvas.y + 10, w * 0.65, jetCanvas.y - 25, w - 30, jetCanvas.y - 35);
+                ctx.stroke();
+
+                // Label
+                ctx.fillStyle = '#fbbf24';
+                ctx.font = 'bold 11px Pretendard, sans-serif';
+                ctx.fillText("중위도 상층 편서풍대 (Westerlies Jet Stream) ➔ 북동진 가속", 40, jetCanvas.y - 12);
+                ctx.restore();
+            }
+
+            // Draw Flowing Atmosphere Particles
+            if (showHigh || showWesterlies) {
+                simState.particles.forEach(p => {
+                    ctx.fillStyle = p.type === 'westerly' ? 'rgba(251, 191, 36, 0.65)' : 'rgba(56, 189, 248, 0.6)';
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.type === 'westerly' ? 1.5 : 1.2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+        }
+
+        function drawTyphoonSystem() {
+            const track = simState.interpolatedTrack;
+            if (!track || track.length === 0) return;
+
+            const currentIndex = Math.min(simState.currentHour, track.length - 1);
+            const currentPoint = track[currentIndex];
+            const showDanger = document.getElementById('toggle-danger-semicircle').checked;
+
+            // 1. Draw Historical & Forecast Track Line
+            // Past line (solid)
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 3.5;
+            ctx.beginPath();
+            for (let i = 0; i <= currentIndex; i++) {
+                const pt = geoToCanvas(track[i].lon, track[i].lat);
+                if (i === 0) ctx.moveTo(pt.x, pt.y);
+                else ctx.lineTo(pt.x, pt.y);
+            }
+            ctx.stroke();
+
+            // Future forecast dotted line
+            if (currentIndex < track.length - 1) {
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                const start = geoToCanvas(track[currentIndex].lon, track[currentIndex].lat);
+                ctx.moveTo(start.x, start.y);
+                for (let i = currentIndex + 1; i < track.length; i++) {
+                    const pt = geoToCanvas(track[i].lon, track[i].lat);
+                    ctx.lineTo(pt.x, pt.y);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // 2. Draw 6-hour interval Track Markers (KMA Official Cyclone Icons)
+            for (let i = 0; i < track.length; i += 6) {
+                const pt = geoToCanvas(track[i].lon, track[i].lat);
+                const isPast = i <= currentIndex;
+
+                // Outer circle marker
+                ctx.fillStyle = isPast ? '#0284c7' : '#475569';
+                ctx.strokeStyle = isPast ? '#ffffff' : '#94a3b8';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Meteorological Typhoon Glyph (spiral arms symbol)
+                drawTyphoonIcon(pt.x, pt.y, isPast ? '#ffffff' : '#cbd5e1', 6);
+
+                // Timestamp Label
+                ctx.fillStyle = isPast ? '#e0f2fe' : '#94a3b8';
+                ctx.font = '9px "JetBrains Mono", sans-serif';
+                ctx.fillText(`+${i}h`, pt.x + 8, pt.y + 3);
+            }
+
+            // 3. Current Typhoon Position and Radius Envelopes
+            const currentCanvas = geoToCanvas(currentPoint.lon, currentPoint.lat);
+
+            // km to canvas pixels scale (Approx: 1 deg lat = 111km)
+            const p1 = geoToCanvas(currentPoint.lon, currentPoint.lat);
+            const p2 = geoToCanvas(currentPoint.lon, currentPoint.lat + 1.0);
+            const pxPerKm = Math.abs(p2.y - p1.y) / 111;
+
+            const galePx = currentPoint.galeRadius * pxPerKm;
+            const stormPx = currentPoint.stormRadius * pxPerKm;
+
+            // Heading Angle (in radians) for Danger/Navigable Semicircles
+            let heading = 0;
+            if (currentIndex > 0) {
+                const prev = geoToCanvas(track[currentIndex - 1].lon, track[currentIndex - 1].lat);
+                heading = Math.atan2(currentCanvas.y - prev.y, currentCanvas.x - prev.x);
+            } else if (track.length > 1) {
+                const nxt = geoToCanvas(track[1].lon, track[1].lat);
+                heading = Math.atan2(nxt.y - currentCanvas.y, nxt.x - currentCanvas.x);
+            }
+
+            // 4. Draw Gale Radius (15m/s - Light Blue)
+            ctx.save();
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(currentCanvas.x, currentCanvas.y, galePx, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // 5. Draw Danger Semicircle (Right 180° in heading direction - Red tint)
+            if (showDanger) {
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
+                ctx.beginPath();
+                // Right side is heading to heading + PI
+                ctx.arc(currentCanvas.x, currentCanvas.y, galePx, heading, heading + Math.PI);
+                ctx.closePath();
+                ctx.fill();
+
+                // Danger semicircle boundary stroke
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // 6. Draw Storm Radius (25m/s - Yellow)
+            if (stormPx > 0) {
+                ctx.fillStyle = 'rgba(234, 179, 8, 0.32)';
+                ctx.strokeStyle = '#eab308';
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                ctx.arc(currentCanvas.x, currentCanvas.y, stormPx, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // 7. Rotating Eye of the Typhoon
+            ctx.save();
+            ctx.translate(currentCanvas.x, currentCanvas.y);
+            const rotation = (Date.now() / 600); // Continuous rotation
+            ctx.rotate(rotation);
+
+            // Eye outer glow
+            const eyeGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, 20);
+            eyeGrad.addColorStop(0, '#ffffff');
+            eyeGrad.addColorStop(0.5, '#ef4444');
+            eyeGrad.addColorStop(1, 'transparent');
+            ctx.fillStyle = eyeGrad;
+            ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Main Rotating Cyclone Vortex Symbol
+            drawTyphoonIcon(0, 0, '#ffffff', 14);
+            ctx.restore();
+
+            // Heading Vector Arrow
+            ctx.save();
+            ctx.strokeStyle = '#f43f5e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(currentCanvas.x, currentCanvas.y);
+            const arrowLen = 35;
+            ctx.lineTo(currentCanvas.x + Math.cos(heading) * arrowLen, currentCanvas.y + Math.sin(heading) * arrowLen);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // Draw Official KMA-style Typhoon Spiral Symbol
+        function drawTyphoonIcon(x, y, color, size) {
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.arc(x, y, size * 0.45, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Top arm
+            ctx.beginPath();
+            ctx.arc(x - (size * 0.35), y, size * 0.7, -Math.PI * 0.4, Math.PI * 0.1);
+            ctx.stroke();
+
+            // Bottom arm
+            ctx.beginPath();
+            ctx.arc(x + (size * 0.35), y, size * 0.7, Math.PI * 0.6, Math.PI * 1.1);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function evaluateRegionalImpacts() {
+            const track = simState.interpolatedTrack;
+            const current = track[Math.min(simState.currentHour, track.length - 1)];
+
+            // Target assessment regions
+            const targets = [
+                { id: "jeju", name: "제주도 / 서귀포", lon: 126.55, lat: 33.35, vul: 1.25 },
+                { id: "busan", name: "부산 / 영남해안", lon: 129.05, lat: 35.10, vul: 1.15 },
+                { id: "seoul", name: "서울 / 수도권", lon: 127.00, lat: 37.56, vul: 0.90 },
+                { id: "okinawa", name: "일본 오키나와", lon: 127.80, lat: 26.30, vul: 1.20 },
+                { id: "shanghai", name: "중국 상하이", lon: 121.50, lat: 31.22, vul: 1.05 }
+            ];
+
+            const impacts = targets.map(t => {
+                // Great-circle approx distance (km)
+                const dLon = (t.lon - current.lon) * Math.cos((t.lat + current.lat) * Math.PI / 360) * 111;
+                const dLat = (t.lat - current.lat) * 111;
+                const distKm = Math.sqrt(dLon * dLon + dLat * dLat);
+
+                // Check if in danger semicircle (east/right of typhoon)
+                const isRightSide = t.lon > current.lon;
+                const sideMultiplier = isRightSide ? 1.25 : 0.85;
+
+                // Wind impact attenuation formula
+                let localWind = 0;
+                let localRain = 0;
+
+                if (distKm < current.galeRadius * 1.6) {
+                    const ratio = Math.max(0, 1 - (distKm / (current.galeRadius * 1.5)));
+                    localWind = current.windSpeed * (0.3 + 0.7 * ratio) * sideMultiplier * t.vul;
+                    localRain = (current.windSpeed * 8) * ratio * sideMultiplier;
+                } else {
+                    localWind = Math.max(6, 15 - (distKm * 0.01));
+                    localRain = Math.max(0, 20 - (distKm * 0.02));
+                }
+
+                // Overall threat index 0 to 100
+                const threatIndex = Math.min(100, Math.round((localWind / 50) * 60 + (localRain / 400) * 40));
+
+                return {
+                    ...t,
+                    distance: Math.round(distKm),
+                    wind: Math.round(localWind * 10) / 10,
+                    rain: Math.round(localRain),
+                    threat: threatIndex,
+                    isRightSide
+                };
+            });
+
+            // Update UI
+            updateImpactDashboard(impacts, current);
+        }
+
+        function updateImpactDashboard(impacts, current) {
+            // Update HUD Header
+            document.getElementById('hud-pressure').textContent = current.pressure;
+            document.getElementById('hud-wind').textContent = current.windSpeed;
+            document.getElementById('hud-grade').textContent = current.stage;
+
+            // Timeline labels
+            document.getElementById('timeline-time-label').textContent = `발생 후 +${current.hour}시간 경과 (현재 위치)`;
+            document.getElementById('stat-peak-wind').innerHTML = `${current.windSpeed} <span class="text-xs">m/s</span>`;
+            
+            const maxEstRain = Math.round(current.windSpeed * 8.2);
+            document.getElementById('stat-peak-rain').innerHTML = `${maxEstRain} <span class="text-xs">mm</span>`;
+
+            // Max danger alert badge
+            const maxThreat = Math.max(...impacts.map(i => i.threat));
+            const badge = document.getElementById('danger-level-badge');
+            if (maxThreat >= 75) {
+                badge.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-red-950 text-red-400 border border-red-800 animate-pulse";
+                badge.textContent = "태풍 경보 (심각)";
+            } else if (maxThreat >= 45) {
+                badge.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-amber-950 text-amber-400 border border-amber-800";
+                badge.textContent = "태풍 주의보";
+            } else {
+                badge.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700";
+                badge.textContent = "영향권 외 (안전)";
+            }
+
+            // Region impact list
+            const container = document.getElementById('region-impact-list');
+            container.innerHTML = impacts.map(item => {
+                let barColor = 'bg-cyan-500';
+                let textColor = 'text-cyan-400';
+                if (item.threat >= 70) {
+                    barColor = 'bg-red-500';
+                    textColor = 'text-red-400';
+                } else if (item.threat >= 45) {
+                    barColor = 'bg-amber-500';
+                    textColor = 'text-amber-400';
+                }
+
+                return `
+                    <div class="bg-slate-800/40 p-2 rounded-lg border border-slate-800">
+                        <div class="flex justify-between items-center text-xs mb-1">
+                            <span class="font-semibold text-slate-200 flex items-center gap-1.5">
+                                ${item.name}
+                                ${item.isRightSide ? '<span class="text-[9px] px-1 py-0.2 bg-red-950/70 text-red-300 border border-red-900 rounded">위험반원</span>' : ''}
+                            </span>
+                            <span class="text-[11px] text-slate-400">거리: <span class="code-font text-slate-200 font-bold">${item.distance}</span> km</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-[11px] text-slate-400 mb-1">
+                            <span>풍속: <b class="${textColor}">${item.wind}</b> m/s</span>
+                            <span>•</span>
+                            <span>강수: <b class="text-cyan-300">${item.rain}</b> mm</span>
+                            <span class="ml-auto font-bold ${textColor}">${item.threat}% 위험</span>
+                        </div>
+                        <div class="w-full bg-slate-700/60 h-1.5 rounded-full overflow-hidden">
+                            <div class="${barColor} h-full transition-all duration-300" style="width: ${item.threat}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Dynamic Situation Briefing
+            const summary = document.getElementById('damage-summary-text');
+            if (current.lat >= 31 && current.lon >= 124 && current.lon <= 132) {
+                summary.innerHTML = `<span class="text-red-400 font-bold">비상:</span> 태풍이 대한해협 및 남해안에 초근접하여 <strong>위험반원(영남/동해안)에 최대 40m/s 이상의 폭풍우</strong>와 해일 위험이 최고조에 달합니다.`;
+            } else if (current.lat < 26) {
+                summary.textContent = `열대 해상에서 북태평양 고기압 가장자리를 따라 북서진 중입니다. 높은 수온으로 인해 세력이 강화되고 있습니다.`;
+            } else if (current.lon < 123) {
+                summary.textContent = `북태평양 고기압의 강한 서쪽 확장으로 인해 한반도를 비껴 중국 동부/하이난 방면으로 이동하고 있습니다.`;
+            } else {
+                summary.textContent = `위도 28°N 부근에서 편서풍 제트기류를 만나 북동쪽으로 전향하며 이동 속도가 급격히 빨라지고 있습니다.`;
+            }
+        }
+
+        function redrawMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawMapBackground();
+            drawAtmosphericPhenomena();
+            drawTyphoonSystem();
+            updateAtmosphericParticles();
+        }
+
+        function animationLoop() {
+            if (simState.isPlaying) {
+                simState.currentHour += 0.25 * (simState.playbackSpeed / 2);
+                if (simState.currentHour >= simState.maxHours) {
+                    simState.currentHour = 0;
+                }
+                document.getElementById('time-slider').value = Math.floor(simState.currentHour);
+                evaluateRegionalImpacts();
+            }
+            redrawMap();
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        // User Interface Controls
+        function togglePlay() {
+            simState.isPlaying = !simState.isPlaying;
+            const icon = document.getElementById('play-icon');
+            if (simState.isPlaying) {
+                icon.className = "fa-solid fa-pause";
+            } else {
+                icon.className = "fa-solid fa-play";
+            }
+        }
+
+        function resetTimeline() {
+            simState.currentHour = 0;
+            document.getElementById('time-slider').value = 0;
+            evaluateRegionalImpacts();
+            redrawMap();
+        }
+
+        function onSliderChange(val) {
+            simState.currentHour = parseFloat(val);
+            evaluateRegionalImpacts();
+            redrawMap();
+        }
+
+        function changeSpeed(val) {
+            simState.playbackSpeed = parseFloat(val);
+        }
+
+        function updateHighPressure(val) {
+            simState.highPressureExpansion = parseFloat(val);
+            const label = document.getElementById('label-high-pressure');
+            const statusLabel = document.getElementById('label-high-strength');
+            if (val > 65) statusLabel.textContent = "서쪽 강한 확장 (중국행)";
+            else if (val < 35) statusLabel.textContent = "동쪽 수축 (일본행)";
+            else statusLabel.textContent = "보통 (한반도 지향)";
+
+            recalculateTrack();
+        }
+
+        function updateWesterlies(val) {
+            simState.westerliesSpeed = parseFloat(val);
+            const label = document.getElementById('label-westerlies');
+            if (val > 60) label.textContent = "강함 (빠른 북동진 전향)";
+            else if (val < 35) label.textContent = "약함 (느린 이동)";
+            else label.textContent = "보통";
+
+            recalculateTrack();
+        }
+
+        function updateSST(val) {
+            simState.sst = parseFloat(val);
+            document.getElementById('label-sst').textContent = `${val}°C (${val >= 29 ? '매우 높음 (급발달)' : '평년 수준'})`;
+            recalculateTrack();
+        }
+
+        function recalculateTrack() {
+            simState.interpolatedTrack = generateTyphoonTrack();
+            evaluateRegionalImpacts();
+            redrawMap();
+        }
+
+        // Scenario Preset Switching
+        function setScenario(type) {
+            simState.currentScenario = type;
+            document.querySelectorAll('.scenario-btn').forEach(b => {
+                b.className = "scenario-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition-all";
+            });
+
+            if (type === 'korea') {
+                document.getElementById('btn-korea').className = "scenario-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-600 text-white shadow";
+                document.getElementById('param-high').value = 50;
+                document.getElementById('param-wind').value = 65;
+                document.getElementById('param-sst').value = 29.5;
+                document.getElementById('hud-typhoon-name').textContent = "제11호 태풍 '힌남노' (한반도 상륙형)";
+            } else if (type === 'west') {
+                document.getElementById('btn-west').className = "scenario-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-600 text-white shadow";
+                document.getElementById('param-high').value = 85; // High pushes typhoon far west
+                document.getElementById('param-wind').value = 40;
+                document.getElementById('param-sst').value = 28.5;
+                document.getElementById('hud-typhoon-name').textContent = "제18호 태풍 '사우델' (중국 서진형)";
+            } else if (type === 'japan') {
+                document.getElementById('btn-japan').className = "scenario-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-600 text-white shadow";
+                document.getElementById('param-high').value = 15; // Weak high allows early recurvature east
+                document.getElementById('param-wind').value = 80;
+                document.getElementById('param-sst').value = 27.5;
+                document.getElementById('hud-typhoon-name').textContent = "제14호 태풍 '난마돌' (동해/일본 전향형)";
+            }
+
+            updateHighPressure(document.getElementById('param-high').value);
+            updateWesterlies(document.getElementById('param-wind').value);
+            updateSST(document.getElementById('param-sst').value);
+            resetTimeline();
+        }
+
+        function resetParams() {
+            setScenario('korea');
+        }
+
+        // Handle Responsive Canvas Resize
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            initAtmosphericParticles();
+            redrawMap();
+        }
+
+        window.onload = function() {
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            simState.interpolatedTrack = generateTyphoonTrack();
+            evaluateRegionalImpacts();
+            initAtmosphericParticles();
+            animationLoop();
+        };
+    </script>
+</body>
+</html>
